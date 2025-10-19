@@ -1,10 +1,10 @@
 blueprint:
-  name: "New York Times News — TTS per-speaker with pre-roll"
+  name: "New York Times News — TTS per-speaker, pre-roll, AI optional"
   description: >
-    Speaks New York Times headlines by category via TTS, playing to your selected
-    media players one-by-one with a configurable pre-roll (like your weather blueprint).
-    Triggers automatically per-category when the Event entity "title" changes.
-    Also supports an optional scheduled Roundup that reads all categories.
+    Speaks New York Times headlines by category via TTS, one speaker at a time with pre-roll and volume set.
+    Plays automatically when each NYT category Event updates its "title".
+    Also supports an optional Roundup on a time_pattern schedule. Both per-category and roundup messages
+    can be rewritten via an AI Task with prompts you control.
   domain: automation
   source_url: "https://github.com/zodyking/weather-forecast-alert-blueprint/blob/main/weather-forecast.yaml"
 
@@ -19,7 +19,7 @@ blueprint:
 
     speakers:
       name: "Speakers (announce to, sequential)"
-      description: "Media players to speak on, one-by-one, in the given order."
+      description: "Media players to speak on, one-by-one, in the order listed."
       selector:
         entity:
           domain: media_player
@@ -27,7 +27,7 @@ blueprint:
 
     preroll_ms:
       name: "TTS pre-roll (milliseconds)"
-      description: "Delay before speaking on each speaker to let it wake up, set volume, etc."
+      description: "Delay before speaking on each speaker to let it wake, set volume, etc."
       default: 150
       selector:
         number:
@@ -58,7 +58,7 @@ blueprint:
     # ---------- NYT Event Entities ----------
     business_event:
       name: "Business event entity"
-      description: 'NYT business Event entity (attribute "title" updates when a new item arrives).'
+      description: 'NYT Business Event entity whose "title" changes on new items.'
       default: event.nyt_business
       selector:
         entity:
@@ -66,7 +66,7 @@ blueprint:
 
     science_event:
       name: "Science event entity"
-      description: 'NYT science Event entity (attribute "title" updates when a new item arrives).'
+      description: 'NYT Science Event entity whose "title" changes on new items.'
       default: event.nyt_science
       selector:
         entity:
@@ -74,7 +74,7 @@ blueprint:
 
     technology_event:
       name: "Technology event entity"
-      description: 'NYT technology Event entity (attribute "title" updates when a new item arrives).'
+      description: 'NYT Technology Event entity whose "title" changes on new items.'
       default: event.nyt_technology
       selector:
         entity:
@@ -82,7 +82,7 @@ blueprint:
 
     world_event:
       name: "World news event entity"
-      description: 'NYT world news Event entity (attribute "title" updates when a new item arrives).'
+      description: 'NYT World News Event entity whose "title" changes on new items.'
       default: event.nyt_world_news
       selector:
         entity:
@@ -96,43 +96,84 @@ blueprint:
         entity:
           domain: event
 
-    # ---------- Scheduled Roundup ----------
-    enable_roundup_schedule:
-      name: "Enable Roundup Schedule"
-      description: "Toggle ON to speak a daily roundup at the time/days below."
+    # ---------- AI Task (shared) ----------
+    ai_task_entity:
+      name: "AI Task entity"
+      description: "Example entity id (e.g. ai_task.google_ai_task_2)."
+      default: ai_task.google_ai_task_2
+      selector:
+        entity:
+          domain: ai_task
+
+    # ---------- AI rewrite: per-category ----------
+    enable_ai_categories:
+      name: "Rewrite per-category updates with AI"
+      description: "Toggle ON to send each single-category item to AI before speaking."
       default: false
       selector:
         boolean: {}
 
-    roundup_time:
-      name: "Roundup time"
-      description: "Time of day to speak the scheduled roundup (used when schedule is enabled)."
-      default: "08:30:00"
+    ai_prompt_categories:
+      name: "AI prompt for per-category updates"
+      description: "The instructions sent to the AI Task when a single category updates."
+      default: >
+        As a professional news anchor to an audience of one, rewrite the text crisply.
+        Keep it short and factual. Use "!" where you would place commas to improve TTS prosody.
+        Do not add intros or outros; return only the rewritten sentence.
+        TEXT: "{{text}}"
       selector:
-        time: {}
+        text:
+          multiline: true
 
-    roundup_weekdays:
-      name: "Roundup days"
-      description: "Days of week to speak the scheduled roundup."
-      default:
-        - Mon
-        - Tue
-        - Wed
-        - Thu
-        - Fri
-        - Sat
-        - Sun
+    # ---------- AI rewrite: roundup ----------
+    enable_roundup_ai:
+      name: "Rewrite scheduled roundup with AI"
+      description: "Toggle ON to send the compiled roundup to AI before speaking."
+      default: true
       selector:
-        select:
-          multiple: true
-          options:
-            - Mon
-            - Tue
-            - Wed
-            - Thu
-            - Fri
-            - Sat
-            - Sun
+        boolean: {}
+
+    ai_prompt_roundup:
+      name: "AI prompt for roundup"
+      description: "The instructions sent to the AI Task for scheduled roundups."
+      default: >
+        As a professional news anchor to an audience of one, summarize the roundup concisely.
+        Structure into segments: Business, Science, Sports, Technology, World. Start each with
+        a short intro like "In business today". Use "!" where commas would be natural, and
+        between segments. Keep it tight and do not add an intro/outro.
+        ROUNDUP: "{{text}}"
+      selector:
+        text:
+          multiline: true
+
+    # ---------- Scheduled Roundup (time_pattern) ----------
+    enable_roundup_schedule:
+      name: "Enable Roundup Schedule (time_pattern)"
+      description: "Toggle ON to speak a roundup on the schedule below."
+      default: false
+      selector:
+        boolean: {}
+
+    roundup_pattern_hours:
+      name: "Hours pattern"
+      description: 'Time pattern for hours (e.g. "*", "*/2", "9-18").'
+      default: "*"
+      selector:
+        text: {}
+
+    roundup_pattern_minutes:
+      name: "Minutes pattern"
+      description: 'Time pattern for minutes (e.g. "0", "*/30").'
+      default: "0"
+      selector:
+        text: {}
+
+    roundup_pattern_seconds:
+      name: "Seconds pattern"
+      description: 'Time pattern for seconds (e.g. "0", "30", "*/10").'
+      default: "0"
+      selector:
+        text: {}
 
 mode: queued
 max: 10
@@ -161,14 +202,16 @@ trigger:
     attribute: title
     id: sports
 
-  # Scheduled Roundup (time-of-day)
-  - platform: time
-    at: !input roundup_time
-    id: roundup_time
+  # Scheduled Roundup via time_pattern
+  - platform: time_pattern
+    hours: !input roundup_pattern_hours
+    minutes: !input roundup_pattern_minutes
+    seconds: !input roundup_pattern_seconds
+    id: roundup_pattern
 
 condition: []
 
-# Make !input values available inside templates safely
+# ---------------------- VARIABLES (expose !input to templates) ----------------------
 variables:
   _tts_entity: !input tts_entity
   _speakers: !input speakers
@@ -182,8 +225,13 @@ variables:
   e_world: !input world_event
   e_sports: !input sports_event
 
+  _ai_task: !input ai_task_entity
+  _ai_cat_enabled: !input enable_ai_categories
+  _ai_roundup_enabled: !input enable_roundup_ai
+  _ai_prompt_cat: !input ai_prompt_categories
+  _ai_prompt_roundup: !input ai_prompt_roundup
+
   _roundup_enabled: !input enable_roundup_schedule
-  _roundup_days: !input roundup_weekdays
 
 # ---------------------- ACTIONS ----------------------
 action:
@@ -194,243 +242,296 @@ action:
             id: business
         sequence:
           - variables:
-              news_msg: >-
+              raw_msg: >-
                 {% set t = (state_attr(e_business,'title') or states(e_business) or '') | trim %}
                 {% set d = (state_attr(e_business,'description') or state_attr(e_business,'content') or '') 
                            | striptags | replace('&nbsp;',' ') | replace('\n',' ')
                            | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _ai_cat_enabled | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: "rewrite news item"
+                      entity_id: "{{ _ai_task }}"
+                      # Replace {{text}} placeholder inside the prompt
+                      instructions: "{{ _ai_prompt_cat | replace('\"', '\"') }}"
+                      inputs:
+                        text: "{{ raw_msg }}"
+                    response_variable: ai_out
+                  - variables:
+                      final_msg: "{{ ai_out.data | default(raw_msg) }}"
+            default:
+              - variables:
+                  final_msg: "{{ raw_msg }}"
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
                 - action: media_player.volume_mute
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    is_volume_muted: false
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { is_volume_muted: false }
                 - action: media_player.volume_set
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    volume_level: "{{ _volume | float }}"
-                - delay:
-                    milliseconds: "{{ _preroll_ms | int }}"
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { volume_level: "{{ _volume | float }}" }
+                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
-                  target:
-                    entity_id: "{{ _tts_entity }}"
+                  target: { entity_id: "{{ _tts_entity }}" }
                   data:
                     cache: false
                     media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ news_msg }}"
-                    options:
-                      voice: "{{ _voice }}"
+                    message: "{{ final_msg }}"
+                    options: { voice: "{{ _voice }}" }
 
       - conditions:
           - condition: trigger
             id: science
         sequence:
           - variables:
-              news_msg: >-
+              raw_msg: >-
                 {% set t = (state_attr(e_science,'title') or states(e_science) or '') | trim %}
                 {% set d = (state_attr(e_science,'description') or state_attr(e_science,'content') or '') 
                            | striptags | replace('&nbsp;',' ') | replace('\n',' ')
                            | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _ai_cat_enabled | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: "rewrite news item"
+                      entity_id: "{{ _ai_task }}"
+                      instructions: "{{ _ai_prompt_cat | replace('\"', '\"') }}"
+                      inputs:
+                        text: "{{ raw_msg }}"
+                    response_variable: ai_out
+                  - variables:
+                      final_msg: "{{ ai_out.data | default(raw_msg) }}"
+            default:
+              - variables:
+                  final_msg: "{{ raw_msg }}"
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
                 - action: media_player.volume_mute
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    is_volume_muted: false
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { is_volume_muted: false }
                 - action: media_player.volume_set
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    volume_level: "{{ _volume | float }}"
-                - delay:
-                    milliseconds: "{{ _preroll_ms | int }}"
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { volume_level: "{{ _volume | float }}" }
+                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
-                  target:
-                    entity_id: "{{ _tts_entity }}"
+                  target: { entity_id: "{{ _tts_entity }}" }
                   data:
                     cache: false
                     media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ news_msg }}"
-                    options:
-                      voice: "{{ _voice }}"
+                    message: "{{ final_msg }}"
+                    options: { voice: "{{ _voice }}" }
 
       - conditions:
           - condition: trigger
             id: technology
         sequence:
           - variables:
-              news_msg: >-
+              raw_msg: >-
                 {% set t = (state_attr(e_technology,'title') or states(e_technology) or '') | trim %}
                 {% set d = (state_attr(e_technology,'description') or state_attr(e_technology,'content') or '') 
                            | striptags | replace('&nbsp;',' ') | replace('\n',' ')
                            | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _ai_cat_enabled | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: "rewrite news item"
+                      entity_id: "{{ _ai_task }}"
+                      instructions: "{{ _ai_prompt_cat | replace('\"', '\"') }}"
+                      inputs:
+                        text: "{{ raw_msg }}"
+                    response_variable: ai_out
+                  - variables:
+                      final_msg: "{{ ai_out.data | default(raw_msg) }}"
+            default:
+              - variables:
+                  final_msg: "{{ raw_msg }}"
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
                 - action: media_player.volume_mute
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    is_volume_muted: false
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { is_volume_muted: false }
                 - action: media_player.volume_set
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    volume_level: "{{ _volume | float }}"
-                - delay:
-                    milliseconds: "{{ _preroll_ms | int }}"
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { volume_level: "{{ _volume | float }}" }
+                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
-                  target:
-                    entity_id: "{{ _tts_entity }}"
+                  target: { entity_id: "{{ _tts_entity }}" }
                   data:
                     cache: false
                     media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ news_msg }}"
-                    options:
-                      voice: "{{ _voice }}"
+                    message: "{{ final_msg }}"
+                    options: { voice: "{{ _voice }}" }
 
       - conditions:
           - condition: trigger
             id: world
         sequence:
           - variables:
-              news_msg: >-
+              raw_msg: >-
                 {% set t = (state_attr(e_world,'title') or states(e_world) or '') | trim %}
                 {% set d = (state_attr(e_world,'description') or state_attr(e_world,'content') or '') 
                            | striptags | replace('&nbsp;',' ') | replace('\n',' ')
                            | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _ai_cat_enabled | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: "rewrite news item"
+                      entity_id: "{{ _ai_task }}"
+                      instructions: "{{ _ai_prompt_cat | replace('\"', '\"') }}"
+                      inputs:
+                        text: "{{ raw_msg }}"
+                    response_variable: ai_out
+                  - variables:
+                      final_msg: "{{ ai_out.data | default(raw_msg) }}"
+            default:
+              - variables:
+                  final_msg: "{{ raw_msg }}"
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
                 - action: media_player.volume_mute
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    is_volume_muted: false
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { is_volume_muted: false }
                 - action: media_player.volume_set
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    volume_level: "{{ _volume | float }}"
-                - delay:
-                    milliseconds: "{{ _preroll_ms | int }}"
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { volume_level: "{{ _volume | float }}" }
+                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
-                  target:
-                    entity_id: "{{ _tts_entity }}"
+                  target: { entity_id: "{{ _tts_entity }}" }
                   data:
                     cache: false
                     media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ news_msg }}"
-                    options:
-                      voice: "{{ _voice }}"
+                    message: "{{ final_msg }}"
+                    options: { voice: "{{ _voice }}" }
 
       - conditions:
           - condition: trigger
             id: sports
         sequence:
           - variables:
-              news_msg: >-
+              raw_msg: >-
                 {% set t = (state_attr(e_sports,'title') or states(e_sports) or '') | trim %}
                 {% set d = (state_attr(e_sports,'description') or state_attr(e_sports,'content') or '') 
                            | striptags | replace('&nbsp;',' ') | replace('\n',' ')
                            | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _ai_cat_enabled | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: "rewrite news item"
+                      entity_id: "{{ _ai_task }}"
+                      instructions: "{{ _ai_prompt_cat | replace('\"', '\"') }}"
+                      inputs:
+                        text: "{{ raw_msg }}"
+                    response_variable: ai_out
+                  - variables:
+                      final_msg: "{{ ai_out.data | default(raw_msg) }}"
+            default:
+              - variables:
+                  final_msg: "{{ raw_msg }}"
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
                 - action: media_player.volume_mute
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    is_volume_muted: false
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { is_volume_muted: false }
                 - action: media_player.volume_set
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    volume_level: "{{ _volume | float }}"
-                - delay:
-                    milliseconds: "{{ _preroll_ms | int }}"
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { volume_level: "{{ _volume | float }}" }
+                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
-                  target:
-                    entity_id: "{{ _tts_entity }}"
+                  target: { entity_id: "{{ _tts_entity }}" }
                   data:
                     cache: false
                     media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ news_msg }}"
-                    options:
-                      voice: "{{ _voice }}"
+                    message: "{{ final_msg }}"
+                    options: { voice: "{{ _voice }}" }
 
-      # ---------------- Scheduled Roundup (time-of-day) ----------------
+      # ---------------- Scheduled Roundup (time_pattern) ----------------
       - conditions:
           - condition: trigger
-            id: roundup_time
+            id: roundup_pattern
         sequence:
-          # Only proceed if schedule is enabled and today is selected
+          # Only proceed if schedule toggle is ON
           - condition: template
-            value_template: >-
-              {% set days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
-              {% set today = days[now().weekday()] %}
-              {{ _roundup_enabled and (today in _roundup_days) }}
+            value_template: "{{ _roundup_enabled | bool }}"
 
           - variables:
               roundup_text: >-
                 {% set lines = [] %}
 
-                {# Business #}
                 {% set e = e_business %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ') 
                                | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In the world of business today: ' ~ t ~ ' — ' ~ d] %}
+                  {% set lines = lines + ['In business today: ' ~ t ~ ' — ' ~ d] %}
                 {% endif %}
 
-                {# Science #}
                 {% set e = e_science %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ') 
                                | replace('\r',' ') | replace('\t',' ') | trim %}
                   {% set lines = lines + ['In science today: ' ~ t ~ ' — ' ~ d] %}
                 {% endif %}
 
-                {# Sports (optional) #}
                 {% set e = e_sports %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ') 
                                | replace('\r',' ') | replace('\t',' ') | trim %}
                   {% set lines = lines + ['In sports today: ' ~ t ~ ' — ' ~ d] %}
                 {% endif %}
 
-                {# Technology #}
                 {% set e = e_technology %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ') 
                                | replace('\r',' ') | replace('\t',' ') | trim %}
                   {% set lines = lines + ['In technology today: ' ~ t ~ ' — ' ~ d] %}
                 {% endif %}
 
-                {# World #}
                 {% set e = e_world %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ') 
                                | replace('\r',' ') | replace('\t',' ') | trim %}
                   {% set lines = lines + ['In world news today: ' ~ t ~ ' — ' ~ d] %}
                 {% endif %}
@@ -440,30 +541,40 @@ action:
           - condition: template
             value_template: "{{ roundup_text | trim != '' }}"
 
-          - variables:
-              final_msg: "{{ roundup_text }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _ai_roundup_enabled | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: "summarize roundup"
+                      entity_id: "{{ _ai_task }}"
+                      instructions: "{{ _ai_prompt_roundup | replace('\"', '\"') }}"
+                      inputs:
+                        text: "{{ roundup_text }}"
+                    response_variable: ai_out
+                  - variables:
+                      final_msg: "{{ ai_out.data | default(roundup_text) }}"
+            default:
+              - variables:
+                  final_msg: "{{ roundup_text }}"
 
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
                 - action: media_player.volume_mute
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    is_volume_muted: false
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { is_volume_muted: false }
                 - action: media_player.volume_set
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    volume_level: "{{ _volume | float }}"
-                - delay:
-                    milliseconds: "{{ _preroll_ms | int }}"
+                  target: { entity_id: "{{ repeat.item }}" }
+                  data: { volume_level: "{{ _volume | float }}" }
+                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
-                  target:
-                    entity_id: "{{ _tts_entity }}"
+                  target: { entity_id: "{{ _tts_entity }}" }
                   data:
                     cache: false
                     media_player_entity_id: "{{ repeat.item }}"
                     message: "{{ final_msg }}"
-                    options:
-                      voice: "{{ _voice }}"
+                    options: { voice: "{{ _voice }}" }
