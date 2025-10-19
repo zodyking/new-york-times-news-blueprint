@@ -15,7 +15,7 @@ blueprint:
     2) Select your **TTS** entity (e.g., `tts.piper`) and your **speakers** (media players).  
     3) Set **Announcement volume**, **Pre-roll**, and **Voice** (if your TTS supports it).  
     4) To schedule the roundup, toggle **Enable Roundup Schedule** and choose the **hour pattern**, **minute**, **active window**, and **weekdays**.  
-    5) To enable AI rewrites, toggle the options and edit the prompts (the blueprint automatically appends the raw text).
+    5) To enable AI rewrites, toggle the options and edit the prompts (the blueprint appends the raw text automatically).
 
   domain: automation
   source_url: "https://github.com/zodyking/new-york-times-news-blueprint"
@@ -321,7 +321,7 @@ trigger:
 
 condition: []
 
-# ---------------------- VARIABLES (expose !input to templates) ----------------------
+# ---------------------- VARIABLES ----------------------
 variables:
   _tts_entity: !input tts_entity
   _speakers: !input speakers
@@ -357,8 +357,7 @@ action:
               raw_msg: >-
                 {% set t = (state_attr(e_business,'title') or states(e_business) or '') | trim %}
                 {% set d = (state_attr(e_business,'description') or state_attr(e_business,'content') or '') 
-                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                           | replace('\r',' ') | replace('\t',' ') | trim %}
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ') | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - choose:
               - conditions: [{ condition: template, value_template: "{{ _ai_cat_enabled | bool }}" }]
@@ -381,10 +380,12 @@ action:
               sequence:
                 - action: media_player.volume_mute
                   target: { entity_id: "{{ repeat.item }}" }
-                  data: { is_volume_muted: false }
+                  data:
+                    is_volume_muted: false
                 - action: media_player.volume_set
                   target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
                   target: { entity_id: "{{ _tts_entity }}" }
@@ -401,8 +402,7 @@ action:
               raw_msg: >-
                 {% set t = (state_attr(e_science,'title') or states(e_science) or '') | trim %}
                 {% set d = (state_attr(e_science,'description') or state_attr(e_science,'content') or '') 
-                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                           | replace('\r',' ') | replace('\t',' ') | trim %}
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ') | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - choose:
               - conditions: [{ condition: template, value_template: "{{ _ai_cat_enabled | bool }}" }]
@@ -425,10 +425,12 @@ action:
               sequence:
                 - action: media_player.volume_mute
                   target: { entity_id: "{{ repeat.item }}" }
-                  data: { is_volume_muted: false }
+                  data:
+                    is_volume_muted: false
                 - action: media_player.volume_set
                   target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
                   target: { entity_id: "{{ _tts_entity }}" }
@@ -445,8 +447,7 @@ action:
               raw_msg: >-
                 {% set t = (state_attr(e_health,'title') or states(e_health) or '') | trim %}
                 {% set d = (state_attr(e_health,'description') or state_attr(e_health,'content') or '') 
-                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                           | replace('\r',' ') | replace('\t',' ') | trim %}
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ') | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - choose:
               - conditions: [{ condition: template, value_template: "{{ _ai_cat_enabled | bool }}" }]
@@ -469,10 +470,12 @@ action:
               sequence:
                 - action: media_player.volume_mute
                   target: { entity_id: "{{ repeat.item }}" }
-                  data: { is_volume_muted: false }
+                  data:
+                    is_volume_muted: false
                 - action: media_player.volume_set
                   target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay: { milliseconds: "{{ _preroll_ms | int }}" }
                 - action: tts.speak
                   target: { entity_id: "{{ _tts_entity }}" }
@@ -483,251 +486,4 @@ action:
                     options: { voice: "{{ _voice }}" }
 
       # --------- Technology ---------
-      - conditions: [{ condition: trigger, id: technology }]
-        sequence:
-          - variables:
-              raw_msg: >-
-                {% set t = (state_attr(e_technology,'title') or states(e_technology) or '') | trim %}
-                {% set d = (state_attr(e_technology,'description') or state_attr(e_technology,'content') or '') 
-                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                           | replace('\r',' ') | replace('\t',' ') | trim %}
-                {{ t }} — {{ d }}
-          - choose:
-              - conditions: [{ condition: template, value_template: "{{ _ai_cat_enabled | bool }}" }]
-                sequence:
-                  - action: ai_task.generate_data
-                    metadata: {}
-                    data:
-                      task_name: "rewrite news item"
-                      entity_id: "{{ _ai_task }}"
-                      instructions: >-
-                        {{ _ai_prompt_cat }}
-
-                        TEXT: {{ raw_msg }}
-                    response_variable: ai_out
-                  - variables: { final_msg: "{{ ai_out.data | default(raw_msg) }}" }
-            default:
-              - variables: { final_msg: "{{ raw_msg }}" }
-          - repeat:
-              for_each: "{{ _speakers }}"
-              sequence:
-                - action: media_player.volume_mute
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { is_volume_muted: false }
-                - action: media_player.volume_set
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
-                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
-                - action: tts.speak
-                  target: { entity_id: "{{ _tts_entity }}" }
-                  data:
-                    cache: false
-                    media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ final_msg }}"
-                    options: { voice: "{{ _voice }}" }
-
-      # --------- World ---------
-      - conditions: [{ condition: trigger, id: world }]
-        sequence:
-          - variables:
-              raw_msg: >-
-                {% set t = (state_attr(e_world,'title') or states(e_world) or '') | trim %}
-                {% set d = (state_attr(e_world,'description') or state_attr(e_world,'content') or '') 
-                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                           | replace('\r',' ') | replace('\t',' ') | trim %}
-                {{ t }} — {{ d }}
-          - choose:
-              - conditions: [{ condition: template, value_template: "{{ _ai_cat_enabled | bool }}" }]
-                sequence:
-                  - action: ai_task.generate_data
-                    metadata: {}
-                    data:
-                      task_name: "rewrite news item"
-                      entity_id: "{{ _ai_task }}"
-                      instructions: >-
-                        {{ _ai_prompt_cat }}
-
-                        TEXT: {{ raw_msg }}
-                    response_variable: ai_out
-                  - variables: { final_msg: "{{ ai_out.data | default(raw_msg) }}" }
-            default:
-              - variables: { final_msg: "{{ raw_msg }}" }
-          - repeat:
-              for_each: "{{ _speakers }}"
-              sequence:
-                - action: media_player.volume_mute
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { is_volume_muted: false }
-                - action: media_player.volume_set
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
-                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
-                - action: tts.speak
-                  target: { entity_id: "{{ _tts_entity }}" }
-                  data:
-                    cache: false
-                    media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ final_msg }}"
-                    options: { voice: "{{ _voice }}" }
-
-      # --------- Sports ---------
-      - conditions: [{ condition: trigger, id: sports }]
-        sequence:
-          - variables:
-              raw_msg: >-
-                {% set t = (state_attr(e_sports,'title') or states(e_sports) or '') | trim %}
-                {% set d = (state_attr(e_sports,'description') or state_attr(e_sports,'content') or '') 
-                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                           | replace('\r',' ') | replace('\t',' ') | trim %}
-                {{ t }} — {{ d }}
-          - choose:
-              - conditions: [{ condition: template, value_template: "{{ _ai_cat_enabled | bool }}" }]
-                sequence:
-                  - action: ai_task.generate_data
-                    metadata: {}
-                    data:
-                      task_name: "rewrite news item"
-                      entity_id: "{{ _ai_task }}"
-                      instructions: >-
-                        {{ _ai_prompt_cat }}
-
-                        TEXT: {{ raw_msg }}
-                    response_variable: ai_out
-                  - variables: { final_msg: "{{ ai_out.data | default(raw_msg) }}" }
-            default:
-              - variables: { final_msg: "{{ raw_msg }}" }
-          - repeat:
-              for_each: "{{ _speakers }}"
-              sequence:
-                - action: media_player.volume_mute
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { is_volume_muted: false }
-                - action: media_player.volume_set
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
-                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
-                - action: tts.speak
-                  target: { entity_id: "{{ _tts_entity }}" }
-                  data:
-                    cache: false
-                    media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ final_msg }}"
-                    options: { voice: "{{ _voice }}" }
-
-      # --------- Scheduled Roundup (time_pattern + active window) ---------
-      - conditions: [{ condition: trigger, id: roundup_pattern }]
-        sequence:
-          - condition: template
-            value_template: "{{ _roundup_enabled | bool }}"
-
-          - condition: template
-            value_template: >-
-              {% set days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
-              {% set today = days[now().weekday()] %}
-              {% set in_day = today in _roundup_days %}
-              {% set start = today_at(_active_from) %}
-              {% set end = today_at(_active_until) %}
-              {% set n = now() %}
-              {% if start <= end %}
-                {% set in_window = (n >= start and n < end) %}
-              {% else %}
-                {% set in_window = (n >= start or n < end) %}
-              {% endif %}
-              {{ in_day and in_window }}
-
-          - variables:
-              roundup_text: >-
-                {% set lines = [] %}
-
-                {% set e = e_business %}
-                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
-                {% if t %}
-                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                               | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In business today: ' ~ t ~ ' — ' ~ d] %}
-                {% endif %}
-
-                {% set e = e_science %}
-                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
-                {% if t %}
-                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                               | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In science today: ' ~ t ~ ' — ' ~ d] %}
-                {% endif %}
-
-                {% set e = e_health %}
-                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
-                {% if t %}
-                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                               | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In health today: ' ~ t ~ ' — ' ~ d] %}
-                {% endif %}
-
-                {% set e = e_sports %}
-                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
-                {% if t %}
-                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                               | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In sports today: ' ~ t ~ ' — ' ~ d] %}
-                {% endif %}
-
-                {% set e = e_technology %}
-                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
-                {% if t %}
-                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                               | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In technology today: ' ~ t ~ ' — ' ~ d] %}
-                {% endif %}
-
-                {% set e = e_world %}
-                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
-                {% if t %}
-                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
-                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
-                               | replace('\r',' ') | replace('\t',' ') | trim %}
-                  {% set lines = lines + ['In world news today: ' ~ t ~ ' — ' ~ d] %}
-                {% endif %}
-
-                {{ lines | join('\n') }}
-
-          - condition: template
-            value_template: "{{ roundup_text | trim != '' }}"
-
-          - choose:
-              - conditions: [{ condition: template, value_template: "{{ _ai_roundup_enabled | bool }}" }]
-                sequence:
-                  - action: ai_task.generate_data
-                    metadata: {}
-                    data:
-                      task_name: "summarize roundup"
-                      entity_id: "{{ _ai_task }}"
-                      instructions: >-
-                        {{ _ai_prompt_roundup }}
-
-                        ROUNDUP: {{ roundup_text }}
-                    response_variable: ai_out
-                  - variables: { final_msg: "{{ ai_out.data | default(roundup_text) }}" }
-            default:
-              - variables: { final_msg: "{{ roundup_text }}" }
-
-          - repeat:
-              for_each: "{{ _speakers }}"
-              sequence:
-                - action: media_player.volume_mute
-                  target: { entity_id: "{{ repeat.item }}" }
-                - action: media_player.volume_set
-                  target: { entity_id: "{{ repeat.item }}" }
-                  data: { volume_level: "{{ _volume | float }}" }
-                - delay: { milliseconds: "{{ _preroll_ms | int }}" }
-                - action: tts.speak
-                  target: { entity_id: "{{ _tts_entity }}" }
-                  data:
-                    cache: false
-                    media_player_entity_id: "{{ repeat.item }}"
-                    message: "{{ final_msg }}"
-                    options: { voice: "{{ _voice }}" }
+      - conditions: [{ condition: trigger, id: techno]()
