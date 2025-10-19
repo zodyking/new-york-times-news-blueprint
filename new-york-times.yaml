@@ -3,9 +3,8 @@ blueprint:
   description: >
     Speaks New York Times headlines by category via TTS, playing to your selected
     media players one-by-one with a configurable pre-roll (like your weather blueprint).
-    Triggers on NYT category events updating their "title" attribute. Also supports an
-    optional Roundup trigger (input button or time of day) that reads all categories
-    and can be condensed by an AI Task before speaking.
+    Triggers on NYT category events updating their "title" attribute. Also supports a
+    Roundup button that reads all categories and can be condensed by an AI Task.
   domain: automation
   source_url: https://github.com/zodyking/weather-forecast-alert-blueprint/blob/main/weather-forecast.yaml
 
@@ -83,21 +82,13 @@ blueprint:
         entity:
           domain: event
 
-    # ---------- Roundup (optional) ----------
+    # ---------- Roundup (button required if you want roundups) ----------
     roundup_button:
-      name: Roundup button (optional)
+      name: Roundup button
       description: Press to read a full roundup across categories.
-      default:
       selector:
         entity:
           domain: input_button
-
-    roundup_time:
-      name: Roundup time (optional)
-      description: Time of day to read the full roundup across categories.
-      default:
-      selector:
-        time: {}
 
     use_ai_summary:
       name: Use AI to condense Roundup
@@ -117,7 +108,8 @@ blueprint:
 mode: queued
 max: 10
 
-triggers:
+# ---------------------- TRIGGERS ----------------------
+trigger:
   # Category update triggers (fire when the article "title" changes)
   - platform: state
     entity_id: !input business_event
@@ -140,51 +132,43 @@ triggers:
     attribute: title
     id: sports
 
-  # Roundup triggers (optional)
+  # Roundup button
   - platform: state
     entity_id: !input roundup_button
     id: roundup
-  - platform: time
-    at: !input roundup_time
-    id: roundup
 
-conditions: []
+condition: []
 
-actions:
-  - variables:
-      _speakers: !input speakers
-      _tts_entity: !input tts_entity
-      _preroll_ms: !input preroll_ms
-      _voice: !input voice
-      _use_ai_summary: !input use_ai_summary
+# Make !input values available inside templates safely
+variables:
+  _tts_entity: !input tts_entity
+  _speakers: !input speakers
+  _preroll_ms: !input preroll_ms
+  _voice: !input voice
 
-      # Helper: sanitizer macro
-      _sanitize: >-
-        {% macro clean(e) -%}
-        {%- set t = (state_attr(e, 'title') or states(e) or '') | trim -%}
-        {%- set d = (state_attr(e, 'description') or state_attr(e, 'content') or '') 
-            | striptags
-            | replace('&nbsp;',' ')
-            | replace('\n',' ')
-            | replace('\r',' ')
-            | replace('\t',' ')
-            | trim -%}
-        {{- (t, d) -}}
-        {%- endmacro -%}
+  e_business: !input business_event
+  e_science: !input science_event
+  e_technology: !input technology_event
+  e_world: !input world_event
+  e_sports: !input sports_event
 
+  _use_ai_summary: !input use_ai_summary
+  _ai_task: !input ai_task_entity
+
+# ---------------------- ACTIONS ----------------------
+action:
   - choose:
-      # ---------------------- Single-category branches ----------------------
+      # ---------------- Single-category branches ----------------
       - conditions:
           - condition: trigger
             id: business
         sequence:
           - variables:
-              news_tuple: >-
-                {% from _sanitize import clean %}
-                {{ clean( !input business_event ) }}
               news_msg: >-
-                {% set t = news_tuple[0] %}
-                {% set d = news_tuple[1] %}
+                {% set t = (state_attr(e_business,'title') or states(e_business) or '') | trim %}
+                {% set d = (state_attr(e_business,'description') or state_attr(e_business,'content') or '') 
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                           | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - repeat:
               for_each: "{{ _speakers }}"
@@ -206,12 +190,11 @@ actions:
             id: science
         sequence:
           - variables:
-              news_tuple: >-
-                {% from _sanitize import clean %}
-                {{ clean( !input science_event ) }}
               news_msg: >-
-                {% set t = news_tuple[0] %}
-                {% set d = news_tuple[1] %}
+                {% set t = (state_attr(e_science,'title') or states(e_science) or '') | trim %}
+                {% set d = (state_attr(e_science,'description') or state_attr(e_science,'content') or '') 
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                           | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - repeat:
               for_each: "{{ _speakers }}"
@@ -233,12 +216,11 @@ actions:
             id: technology
         sequence:
           - variables:
-              news_tuple: >-
-                {% from _sanitize import clean %}
-                {{ clean( !input technology_event ) }}
               news_msg: >-
-                {% set t = news_tuple[0] %}
-                {% set d = news_tuple[1] %}
+                {% set t = (state_attr(e_technology,'title') or states(e_technology) or '') | trim %}
+                {% set d = (state_attr(e_technology,'description') or state_attr(e_technology,'content') or '') 
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                           | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - repeat:
               for_each: "{{ _speakers }}"
@@ -260,12 +242,11 @@ actions:
             id: world
         sequence:
           - variables:
-              news_tuple: >-
-                {% from _sanitize import clean %}
-                {{ clean( !input world_event ) }}
               news_msg: >-
-                {% set t = news_tuple[0] %}
-                {% set d = news_tuple[1] %}
+                {% set t = (state_attr(e_world,'title') or states(e_world) or '') | trim %}
+                {% set d = (state_attr(e_world,'description') or state_attr(e_world,'content') or '') 
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                           | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - repeat:
               for_each: "{{ _speakers }}"
@@ -287,12 +268,11 @@ actions:
             id: sports
         sequence:
           - variables:
-              news_tuple: >-
-                {% from _sanitize import clean %}
-                {{ clean( !input sports_event ) }}
               news_msg: >-
-                {% set t = news_tuple[0] %}
-                {% set d = news_tuple[1] %}
+                {% set t = (state_attr(e_sports,'title') or states(e_sports) or '') | trim %}
+                {% set d = (state_attr(e_sports,'description') or state_attr(e_sports,'content') or '') 
+                           | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                           | replace('\r',' ') | replace('\t',' ') | trim %}
                 {{ t }} — {{ d }}
           - repeat:
               for_each: "{{ _speakers }}"
@@ -309,7 +289,7 @@ actions:
                     options:
                       voice: "{{ _voice }}"
 
-      # ---------------------- Roundup branch (button/time) ----------------------
+      # ---------------- Roundup branch (button) ----------------
       - conditions:
           - condition: trigger
             id: roundup
@@ -319,7 +299,7 @@ actions:
                 {% set lines = [] %}
 
                 {# Business #}
-                {% set e = !input business_event %}
+                {% set e = e_business %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
@@ -329,7 +309,7 @@ actions:
                 {% endif %}
 
                 {# Science #}
-                {% set e = !input science_event %}
+                {% set e = e_science %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
@@ -339,7 +319,7 @@ actions:
                 {% endif %}
 
                 {# Sports (optional) #}
-                {% set e = !input sports_event %}
+                {% set e = e_sports %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
@@ -349,7 +329,7 @@ actions:
                 {% endif %}
 
                 {# Technology #}
-                {% set e = !input technology_event %}
+                {% set e = e_technology %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
@@ -359,7 +339,7 @@ actions:
                 {% endif %}
 
                 {# World #}
-                {% set e = !input world_event %}
+                {% set e = e_world %}
                 {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
                 {% if t %}
                   {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
@@ -382,7 +362,7 @@ actions:
                     metadata: {}
                     data:
                       task_name: summarize news
-                      entity_id: !input ai_task_entity
+                      entity_id: "{{ _ai_task }}"
                       instructions: >-
                         As a professional news anchor to an audience of one, summarize
                         the following roundup as concisely as possible. Structure into
