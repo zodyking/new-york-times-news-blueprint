@@ -82,7 +82,7 @@ blueprint:
         entity:
           domain: event
 
-    # ---------- Roundup (button required if you want roundups) ----------
+    # ---------- Roundup (button) ----------
     roundup_button:
       name: Roundup button
       description: Press to read a full roundup across categories.
@@ -99,7 +99,7 @@ blueprint:
 
     ai_task_entity:
       name: AI Task entity (used if "Use AI to condense Roundup" is on)
-      description: For example: ai_task.google_ai_task_2
+      description: 'For example: ai_task.google_ai_task_2'
       default: ai_task.google_ai_task_2
       selector:
         entity:
@@ -108,7 +108,7 @@ blueprint:
 mode: queued
 max: 10
 
-# ---------------------- TRIGGERS ----------------------
+# ---------------------- TRIGGER ----------------------
 trigger:
   # Category update triggers (fire when the article "title" changes)
   - platform: state
