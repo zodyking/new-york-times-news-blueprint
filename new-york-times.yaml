@@ -3,8 +3,8 @@ blueprint:
   description: >
     Speaks New York Times headlines by category via TTS, playing to your selected
     media players one-by-one with a configurable pre-roll (like your weather blueprint).
-    Triggers on NYT category events updating their "title" attribute. Also supports a
-    Roundup button that reads all categories and can be condensed by an AI Task.
+    Triggers automatically per-category when the Event entity "title" changes.
+    Also supports an optional scheduled Roundup that reads all categories.
   domain: automation
   source_url: "https://github.com/zodyking/weather-forecast-alert-blueprint/blob/main/weather-forecast.yaml"
 
@@ -35,6 +35,17 @@ blueprint:
           max: 3000
           step: 50
           unit_of_measurement: ms
+          mode: slider
+
+    volume_level:
+      name: "Announcement volume"
+      description: "Sets media player volume before each TTS (0.0–1.0)."
+      default: 0.60
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.01
           mode: slider
 
     voice:
@@ -85,33 +96,48 @@ blueprint:
         entity:
           domain: event
 
-    # ---------- Roundup (button) ----------
-    roundup_button:
-      name: "Roundup button"
-      description: "Press to read a full roundup across categories."
-      selector:
-        entity:
-          domain: input_button
-
-    use_ai_summary:
-      name: "Use AI to condense Roundup"
-      description: "Sends the raw roundup text to an AI Task and speaks the result."
-      default: true
+    # ---------- Scheduled Roundup ----------
+    enable_roundup_schedule:
+      name: "Enable Roundup Schedule"
+      description: "Toggle ON to speak a daily roundup at the time/days below."
+      default: false
       selector:
         boolean: {}
 
-    ai_task_entity:
-      name: "AI Task entity (used if Use AI to condense Roundup is on)"
-      description: "Example entity id (e.g. ai_task.google_ai_task_2)."
-      default: ai_task.google_ai_task_2
+    roundup_time:
+      name: "Roundup time"
+      description: "Time of day to speak the scheduled roundup (used when schedule is enabled)."
+      default: "08:30:00"
       selector:
-        entity:
-          domain: ai_task
+        time: {}
+
+    roundup_weekdays:
+      name: "Roundup days"
+      description: "Days of week to speak the scheduled roundup."
+      default:
+        - Mon
+        - Tue
+        - Wed
+        - Thu
+        - Fri
+        - Sat
+        - Sun
+      selector:
+        select:
+          multiple: true
+          options:
+            - Mon
+            - Tue
+            - Wed
+            - Thu
+            - Fri
+            - Sat
+            - Sun
 
 mode: queued
 max: 10
 
-# ---------------------- TRIGGER ----------------------
+# ---------------------- TRIGGERS ----------------------
 trigger:
   # Category update triggers (fire when the article "title" changes)
   - platform: state
@@ -135,10 +161,10 @@ trigger:
     attribute: title
     id: sports
 
-  # Roundup button
-  - platform: state
-    entity_id: !input roundup_button
-    id: roundup
+  # Scheduled Roundup (time-of-day)
+  - platform: time
+    at: !input roundup_time
+    id: roundup_time
 
 condition: []
 
@@ -148,6 +174,7 @@ variables:
   _speakers: !input speakers
   _preroll_ms: !input preroll_ms
   _voice: !input voice
+  _volume: !input volume_level
 
   e_business: !input business_event
   e_science: !input science_event
@@ -155,8 +182,8 @@ variables:
   e_world: !input world_event
   e_sports: !input sports_event
 
-  _use_ai_summary: !input use_ai_summary
-  _ai_task: !input ai_task_entity
+  _roundup_enabled: !input enable_roundup_schedule
+  _roundup_days: !input roundup_weekdays
 
 # ---------------------- ACTIONS ----------------------
 action:
@@ -176,6 +203,16 @@ action:
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
+                - action: media_player.volume_mute
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    is_volume_muted: false
+                - action: media_player.volume_set
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay:
                     milliseconds: "{{ _preroll_ms | int }}"
                 - action: tts.speak
@@ -202,6 +239,16 @@ action:
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
+                - action: media_player.volume_mute
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    is_volume_muted: false
+                - action: media_player.volume_set
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay:
                     milliseconds: "{{ _preroll_ms | int }}"
                 - action: tts.speak
@@ -228,6 +275,16 @@ action:
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
+                - action: media_player.volume_mute
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    is_volume_muted: false
+                - action: media_player.volume_set
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay:
                     milliseconds: "{{ _preroll_ms | int }}"
                 - action: tts.speak
@@ -254,6 +311,16 @@ action:
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
+                - action: media_player.volume_mute
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    is_volume_muted: false
+                - action: media_player.volume_set
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay:
                     milliseconds: "{{ _preroll_ms | int }}"
                 - action: tts.speak
@@ -280,6 +347,16 @@ action:
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
+                - action: media_player.volume_mute
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    is_volume_muted: false
+                - action: media_player.volume_set
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay:
                     milliseconds: "{{ _preroll_ms | int }}"
                 - action: tts.speak
@@ -292,11 +369,18 @@ action:
                     options:
                       voice: "{{ _voice }}"
 
-      # ---------------- Roundup branch (button) ----------------
+      # ---------------- Scheduled Roundup (time-of-day) ----------------
       - conditions:
           - condition: trigger
-            id: roundup
+            id: roundup_time
         sequence:
+          # Only proceed if schedule is enabled and today is selected
+          - condition: template
+            value_template: >-
+              {% set days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+              {% set today = days[now().weekday()] %}
+              {{ _roundup_enabled and (today in _roundup_days) }}
+
           - variables:
               roundup_text: >-
                 {% set lines = [] %}
@@ -356,36 +440,22 @@ action:
           - condition: template
             value_template: "{{ roundup_text | trim != '' }}"
 
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ _use_ai_summary | bool }}"
-                sequence:
-                  - action: ai_task.generate_data
-                    metadata: {}
-                    data:
-                      task_name: "summarize news"
-                      entity_id: "{{ _ai_task }}"
-                      instructions: >-
-                        As a professional news anchor to an audience of one, summarize
-                        the following roundup as concisely as possible. Structure into
-                        segments: Business, Science, Sports, Technology, and World.
-                        Start each segment with a short intro like "In business today".
-                        Use "!" where you would naturally place commas, and also between
-                        segments (this is for my TTS prosody). Keep it tight, accurate,
-                        and do not add an intro/outro.
-                        ROUNDUP:
-                        "{{ roundup_text }}"
-                    response_variable: ainews
-                  - variables:
-                      final_msg: "{{ ainews.data | default(roundup_text) }}"
-            default:
-              - variables:
-                  final_msg: "{{ roundup_text }}"
+          - variables:
+              final_msg: "{{ roundup_text }}"
 
           - repeat:
               for_each: "{{ _speakers }}"
               sequence:
+                - action: media_player.volume_mute
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    is_volume_muted: false
+                - action: media_player.volume_set
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ _volume | float }}"
                 - delay:
                     milliseconds: "{{ _preroll_ms | int }}"
                 - action: tts.speak
