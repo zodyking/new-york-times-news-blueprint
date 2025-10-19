@@ -1,0 +1,416 @@
+blueprint:
+  name: New York Times News — TTS per-speaker with pre-roll
+  description: >
+    Speaks New York Times headlines by category via TTS, playing to your selected
+    media players one-by-one with a configurable pre-roll (like your weather blueprint).
+    Triggers on NYT category events updating their "title" attribute. Also supports an
+    optional Roundup trigger (input button or time of day) that reads all categories
+    and can be condensed by an AI Task before speaking.
+  domain: automation
+  source_url: https://github.com/zodyking/weather-forecast-alert-blueprint/blob/main/weather-forecast.yaml
+
+  input:
+    # ---------- TTS / Speakers ----------
+    tts_entity:
+      name: TTS Entity
+      description: Select your TTS entity (e.g. tts.piper, tts.cloud).
+      selector:
+        entity:
+          domain: tts
+
+    speakers:
+      name: Speakers (announce to, sequential)
+      description: Media players to speak on, one-by-one, in the given order.
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+    preroll_ms:
+      name: TTS pre-roll (milliseconds)
+      description: Delay before speaking on each speaker to let it wake up, set volume, etc.
+      default: 150
+      selector:
+        number:
+          min: 0
+          max: 3000
+          step: 50
+          unit_of_measurement: ms
+          mode: slider
+
+    voice:
+      name: Voice (if supported by your TTS)
+      description: Voice ID (e.g., Piper "en_US-carlin-high"). Leave as-is if your TTS ignores it.
+      default: en_US-carlin-high
+      selector:
+        text: {}
+
+    # ---------- NYT Event Entities ----------
+    business_event:
+      name: Business event entity
+      description: NYT business Event entity (attribute "title" updates when a new item arrives).
+      default: event.nyt_business
+      selector:
+        entity:
+          domain: event
+
+    science_event:
+      name: Science event entity
+      default: event.nyt_science
+      selector:
+        entity:
+          domain: event
+
+    technology_event:
+      name: Technology event entity
+      default: event.nyt_technology
+      selector:
+        entity:
+          domain: event
+
+    world_event:
+      name: World news event entity
+      default: event.nyt_world_news
+      selector:
+        entity:
+          domain: event
+
+    sports_event:
+      name: Sports event entity (optional)
+      description: Optional; if not available it will be skipped in roundups.
+      default: event.nyt_sports
+      selector:
+        entity:
+          domain: event
+
+    # ---------- Roundup (optional) ----------
+    roundup_button:
+      name: Roundup button (optional)
+      description: Press to read a full roundup across categories.
+      default:
+      selector:
+        entity:
+          domain: input_button
+
+    roundup_time:
+      name: Roundup time (optional)
+      description: Time of day to read the full roundup across categories.
+      default:
+      selector:
+        time: {}
+
+    use_ai_summary:
+      name: Use AI to condense Roundup
+      description: Sends the raw roundup text to an AI Task and speaks the result.
+      default: true
+      selector:
+        boolean: {}
+
+    ai_task_entity:
+      name: AI Task entity (used if "Use AI to condense Roundup" is on)
+      description: For example: ai_task.google_ai_task_2
+      default: ai_task.google_ai_task_2
+      selector:
+        entity:
+          domain: ai_task
+
+mode: queued
+max: 10
+
+triggers:
+  # Category update triggers (fire when the article "title" changes)
+  - platform: state
+    entity_id: !input business_event
+    attribute: title
+    id: business
+  - platform: state
+    entity_id: !input science_event
+    attribute: title
+    id: science
+  - platform: state
+    entity_id: !input technology_event
+    attribute: title
+    id: technology
+  - platform: state
+    entity_id: !input world_event
+    attribute: title
+    id: world
+  - platform: state
+    entity_id: !input sports_event
+    attribute: title
+    id: sports
+
+  # Roundup triggers (optional)
+  - platform: state
+    entity_id: !input roundup_button
+    id: roundup
+  - platform: time
+    at: !input roundup_time
+    id: roundup
+
+conditions: []
+
+actions:
+  - variables:
+      _speakers: !input speakers
+      _tts_entity: !input tts_entity
+      _preroll_ms: !input preroll_ms
+      _voice: !input voice
+      _use_ai_summary: !input use_ai_summary
+
+      # Helper: sanitizer macro
+      _sanitize: >-
+        {% macro clean(e) -%}
+        {%- set t = (state_attr(e, 'title') or states(e) or '') | trim -%}
+        {%- set d = (state_attr(e, 'description') or state_attr(e, 'content') or '') 
+            | striptags
+            | replace('&nbsp;',' ')
+            | replace('\n',' ')
+            | replace('\r',' ')
+            | replace('\t',' ')
+            | trim -%}
+        {{- (t, d) -}}
+        {%- endmacro -%}
+
+  - choose:
+      # ---------------------- Single-category branches ----------------------
+      - conditions:
+          - condition: trigger
+            id: business
+        sequence:
+          - variables:
+              news_tuple: >-
+                {% from _sanitize import clean %}
+                {{ clean( !input business_event ) }}
+              news_msg: >-
+                {% set t = news_tuple[0] %}
+                {% set d = news_tuple[1] %}
+                {{ t }} — {{ d }}
+          - repeat:
+              for_each: "{{ _speakers }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ _preroll_ms | int }}"
+                - action: tts.speak
+                  target:
+                    entity_id: "{{ _tts_entity }}"
+                  data:
+                    cache: false
+                    media_player_entity_id: "{{ repeat.item }}"
+                    message: "{{ news_msg }}"
+                    options:
+                      voice: "{{ _voice }}"
+
+      - conditions:
+          - condition: trigger
+            id: science
+        sequence:
+          - variables:
+              news_tuple: >-
+                {% from _sanitize import clean %}
+                {{ clean( !input science_event ) }}
+              news_msg: >-
+                {% set t = news_tuple[0] %}
+                {% set d = news_tuple[1] %}
+                {{ t }} — {{ d }}
+          - repeat:
+              for_each: "{{ _speakers }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ _preroll_ms | int }}"
+                - action: tts.speak
+                  target:
+                    entity_id: "{{ _tts_entity }}"
+                  data:
+                    cache: false
+                    media_player_entity_id: "{{ repeat.item }}"
+                    message: "{{ news_msg }}"
+                    options:
+                      voice: "{{ _voice }}"
+
+      - conditions:
+          - condition: trigger
+            id: technology
+        sequence:
+          - variables:
+              news_tuple: >-
+                {% from _sanitize import clean %}
+                {{ clean( !input technology_event ) }}
+              news_msg: >-
+                {% set t = news_tuple[0] %}
+                {% set d = news_tuple[1] %}
+                {{ t }} — {{ d }}
+          - repeat:
+              for_each: "{{ _speakers }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ _preroll_ms | int }}"
+                - action: tts.speak
+                  target:
+                    entity_id: "{{ _tts_entity }}"
+                  data:
+                    cache: false
+                    media_player_entity_id: "{{ repeat.item }}"
+                    message: "{{ news_msg }}"
+                    options:
+                      voice: "{{ _voice }}"
+
+      - conditions:
+          - condition: trigger
+            id: world
+        sequence:
+          - variables:
+              news_tuple: >-
+                {% from _sanitize import clean %}
+                {{ clean( !input world_event ) }}
+              news_msg: >-
+                {% set t = news_tuple[0] %}
+                {% set d = news_tuple[1] %}
+                {{ t }} — {{ d }}
+          - repeat:
+              for_each: "{{ _speakers }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ _preroll_ms | int }}"
+                - action: tts.speak
+                  target:
+                    entity_id: "{{ _tts_entity }}"
+                  data:
+                    cache: false
+                    media_player_entity_id: "{{ repeat.item }}"
+                    message: "{{ news_msg }}"
+                    options:
+                      voice: "{{ _voice }}"
+
+      - conditions:
+          - condition: trigger
+            id: sports
+        sequence:
+          - variables:
+              news_tuple: >-
+                {% from _sanitize import clean %}
+                {{ clean( !input sports_event ) }}
+              news_msg: >-
+                {% set t = news_tuple[0] %}
+                {% set d = news_tuple[1] %}
+                {{ t }} — {{ d }}
+          - repeat:
+              for_each: "{{ _speakers }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ _preroll_ms | int }}"
+                - action: tts.speak
+                  target:
+                    entity_id: "{{ _tts_entity }}"
+                  data:
+                    cache: false
+                    media_player_entity_id: "{{ repeat.item }}"
+                    message: "{{ news_msg }}"
+                    options:
+                      voice: "{{ _voice }}"
+
+      # ---------------------- Roundup branch (button/time) ----------------------
+      - conditions:
+          - condition: trigger
+            id: roundup
+        sequence:
+          - variables:
+              roundup_text: >-
+                {% set lines = [] %}
+
+                {# Business #}
+                {% set e = !input business_event %}
+                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
+                {% if t %}
+                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | replace('\r',' ') | replace('\t',' ') | trim %}
+                  {% set lines = lines + ['In the world of business today: ' ~ t ~ ' — ' ~ d] %}
+                {% endif %}
+
+                {# Science #}
+                {% set e = !input science_event %}
+                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
+                {% if t %}
+                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | replace('\r',' ') | replace('\t',' ') | trim %}
+                  {% set lines = lines + ['In science today: ' ~ t ~ ' — ' ~ d] %}
+                {% endif %}
+
+                {# Sports (optional) #}
+                {% set e = !input sports_event %}
+                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
+                {% if t %}
+                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | replace('\r',' ') | replace('\t',' ') | trim %}
+                  {% set lines = lines + ['In sports today: ' ~ t ~ ' — ' ~ d] %}
+                {% endif %}
+
+                {# Technology #}
+                {% set e = !input technology_event %}
+                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
+                {% if t %}
+                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | replace('\r',' ') | replace('\t',' ') | trim %}
+                  {% set lines = lines + ['In technology today: ' ~ t ~ ' — ' ~ d] %}
+                {% endif %}
+
+                {# World #}
+                {% set e = !input world_event %}
+                {% set t = (state_attr(e,'title') or states(e) or '') | trim %}
+                {% if t %}
+                  {% set d = (state_attr(e,'description') or state_attr(e,'content') or '') 
+                               | striptags | replace('&nbsp;',' ') | replace('\n',' ')
+                               | replace('\r',' ') | replace('\t',' ') | trim %}
+                  {% set lines = lines + ['In world news today: ' ~ t ~ ' — ' ~ d] %}
+                {% endif %}
+
+                {{ lines | join('\n') }}
+
+          - condition: template
+            value_template: "{{ roundup_text | trim != '' }}"
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ _use_ai_summary | bool }}"
+                sequence:
+                  - action: ai_task.generate_data
+                    metadata: {}
+                    data:
+                      task_name: summarize news
+                      entity_id: !input ai_task_entity
+                      instructions: >-
+                        As a professional news anchor to an audience of one, summarize
+                        the following roundup as concisely as possible. Structure into
+                        segments: Business, Science, Sports, Technology, and World.
+                        Start each segment with a short intro like "In business today".
+                        Use "!" where you would naturally place commas, and also between
+                        segments (this is for my TTS prosody). Keep it tight, accurate,
+                        and do not add an intro/outro.
+                        ROUNDUP:
+                        "{{ roundup_text }}"
+                    response_variable: ainews
+                  - variables:
+                      final_msg: "{{ ainews.data | default(roundup_text) }}"
+            default:
+              - variables:
+                  final_msg: "{{ roundup_text }}"
+
+          - repeat:
+              for_each: "{{ _speakers }}"
+              sequence:
+                - delay:
+                    milliseconds: "{{ _preroll_ms | int }}"
+                - action: tts.speak
+                  target:
+                    entity_id: "{{ _tts_entity }}"
+                  data:
+                    cache: false
+                    media_player_entity_id: "{{ repeat.item }}"
+                    message: "{{ final_msg }}"
+                    options:
+                      voice: "{{ _voice }}"
